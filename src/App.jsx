@@ -106,6 +106,10 @@ STRETCH YOUR MIND.
 const STORAGE_KEY = "hexler-current-game";
 const STATS_KEY = "hexler-completion-stats";
 
+function createEmptyNotes() {
+  return Array.from({ length: 256 }, () => []);
+}
+
 const DEFAULT_STATS = {
   Easy: 0,
   Medium: 0,
@@ -132,12 +136,19 @@ function App() {
     useState(true);
     const [mistakes, setMistakes] = useState(0);
     const [notesOn, setNotesOn] = useState(false);
-const [notes, setNotes] = useState(
-  Array.from({ length: 256 }, () => [])
-);
+const [notes, setNotes] = useState(createEmptyNotes);
 
   const [completionStats, setCompletionStats] =
-    useState(DEFAULT_STATS);
+    useState(() => {
+      const savedStats = localStorage.getItem(STATS_KEY);
+      if (!savedStats) return DEFAULT_STATS;
+      try {
+        return { ...DEFAULT_STATS, ...JSON.parse(savedStats) };
+      } catch {
+        localStorage.removeItem(STATS_KEY);
+        return DEFAULT_STATS;
+      }
+    });
     const [gameHistory, setGameHistory] = useState(() => {
       const savedHistory = localStorage.getItem("hexlerGameHistory");
       if (!savedHistory) return [];
@@ -148,25 +159,6 @@ const [notes, setNotes] = useState(
         return [];
       }
     });
-
-   // Load saved game and statistics.
-
-  useEffect(() => {
-    function handleDeveloperKey(event) {
-      if (event.key.toLowerCase() === "h") {
-        setScreen("home");
-      }
-    }
-
-    window.addEventListener("keydown", handleDeveloperKey);
-
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        handleDeveloperKey
-      );
-    };
-  }, []);
 
   // Timer.
   useEffect(() => {
@@ -207,6 +199,7 @@ const [notes, setNotes] = useState(
       symbolHighlightOn,
       errorCheckActive,
       mistakes,
+      notes,
     };
 
     localStorage.setItem(
@@ -226,6 +219,7 @@ const [notes, setNotes] = useState(
     symbolHighlightOn,
     errorCheckActive,
     mistakes,
+    notes,
   ]);
 
   function startGame(difficulty = "Medium") {
@@ -239,6 +233,7 @@ const [notes, setNotes] = useState(
     setPaused(false);
     setElapsedSeconds(0);
     setMistakes(0);
+    setNotes(createEmptyNotes());
 
     // Default assistance settings for Easy/Medium.
     setCrosshairOn(true);
@@ -267,6 +262,11 @@ const [notes, setNotes] = useState(
       setPaused(game.paused ?? false);
       setElapsedSeconds(game.elapsedSeconds ?? 0);
       setMistakes(game.mistakes ?? 0);
+      setNotes(
+        Array.isArray(game.notes) && game.notes.length === 256
+          ? game.notes
+          : createEmptyNotes()
+      );
 
       setCrosshairOn(
         game.crosshairOn ?? true
@@ -448,7 +448,9 @@ const [notes, setNotes] = useState(
   }
 
   function getActiveCell() {
-  return hoveredCell;
+    // Hovering takes priority; otherwise follow the selected
+    // cell so the crosshair also works on touch screens.
+    return hoveredCell ?? selected;
   }
 
   function isCellInCrosshair(index) {
@@ -854,6 +856,7 @@ localStorage.removeItem(STORAGE_KEY);
                 )}
               </div>
 
+             {isAssistanceEnabled() && (
              <div className="control-row">
                 <button
                   className={`control-button ${
@@ -893,6 +896,7 @@ localStorage.removeItem(STORAGE_KEY);
                     : "OFF"}
                 </button>
               </div>
+             )}
  <div className="control-row">
                 <button
                   className={`control-button ${
@@ -942,17 +946,6 @@ localStorage.removeItem(STORAGE_KEY);
                   disabled={paused}
                 >
                   Erase
-                </button>
-
-                <button
-                  className="control-button"
-                  onClick={() => {
-                    handleValueChange(
-                      [...puzzleData.solution]
-                    );
-                  }}
-                >
-                  TEST COMPLETE
                 </button>
 
                 <button
@@ -1077,8 +1070,8 @@ localStorage.removeItem(STORAGE_KEY);
     {[
         "0123456789ABCDEF",
   "4567            ",
-  "89ab            ",
-  "Cdef            ",
+  "89AB            ",
+  "CDEF            ",
   "1               ",
   "5               ",
   "9               ",
@@ -1211,17 +1204,12 @@ localStorage.removeItem(STORAGE_KEY);
             : "PLAY"}
         </button>
 
-        {!savedGameAvailable && (
-  <button
-    className="how-to-play"
-    onClick={() => {
-  console.log("HOW TO PLAY CLICKED");
-  setScreen("howto");
-}}
-  >
-    How to Play
-  </button>
-)}
+        <button
+          className="how-to-play"
+          onClick={() => setScreen("howto")}
+        >
+          How to Play
+        </button>
       </main>
     </div>
   );
